@@ -24,54 +24,55 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Read from stdin
-	scanner := bufio.NewScanner(os.Stdin)
-	lines := []string{}
+	// Open stdin as a bufio.Reader
+	reader := bufio.NewReader(os.Stdin)
 
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-	check(scanner.Err())
+	// Initialize counters and file writers
+	totalLines := 0
+	splits := make([]int, n)
+	writers := make([]*bufio.Writer, n)
+	files := make([]*os.File, n)
 
-	totalLines := len(lines)
-	if totalLines == 0 {
-		fmt.Println("No input provided.")
-		os.Exit(1)
-	}
-
-	if n > totalLines {
-		fmt.Printf("Number of splits %d is greater than the number of lines %d in the input.\n", n, totalLines)
-		os.Exit(1)
-	}
-
-	// Calculate lines per file
-	linesPerFile := totalLines / n
-	remainder := totalLines % n
-
-	// Get the base name for the output files
-	base := "split_part"
-	extension := ".txt"
-
-	for i := 0; i < n; i++ {
-		partFileName := fmt.Sprintf("%s%d%s", base, i+1, extension)
-		partFile, err := os.Create(partFileName)
-		check(err)
-		defer partFile.Close()
-
-		writer := bufio.NewWriter(partFile)
-		startLine := i * linesPerFile
-		endLine := startLine + linesPerFile
-		if i == n-1 {
-			// Add the remainder to the last file
-			endLine += remainder
+	defer func() {
+		// Ensure all files are closed properly
+		for i := 0; i < n; i++ {
+			if writers[i] != nil {
+				err := writers[i].Flush()
+				check(err)
+				err = files[i].Close()
+				check(err)
+			}
 		}
+	}()
 
-		for _, line := range lines[startLine:endLine] {
-			_, err := writer.WriteString(line + "\n")
+	// Process input line by line
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			break // End of input
+		}
+		totalLines++
+		idx := totalLines % n
+		splits[idx]++
+
+		// Initialize file writer for the current split if not already initialized
+		if writers[idx] == nil {
+			filename := fmt.Sprintf("split_part%d.txt", idx+1)
+			file, err := os.Create(filename)
 			check(err)
+			files[idx] = file
+			writers[idx] = bufio.NewWriter(file)
 		}
-		writer.Flush()
+
+		// Write line to the corresponding split file
+		_, err = writers[idx].WriteString(line)
+		check(err)
 	}
 
+	// Output summary of splits
+	fmt.Printf("Input lines: %d\n", totalLines)
+	for i := 0; i < n; i++ {
+		fmt.Printf("Split %d: %d lines\n", i+1, splits[i])
+	}
 	fmt.Println("Splitting completed.")
 }
