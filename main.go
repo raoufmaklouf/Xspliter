@@ -1,83 +1,77 @@
 package main
 
 import (
-    "bufio"
-    "flag"
-    "fmt"
-    "os"
-    "path/filepath"
+	"bufio"
+	"flag"
+	"fmt"
+	"os"
 )
 
 func check(err error) {
-    if err != nil {
-        fmt.Println("Error:", err)
-        os.Exit(1)
-    }
+	if err != nil {
+		fmt.Println("Error:", err)
+		os.Exit(1)
+	}
 }
 
 func main() {
-    var n int
-    flag.IntVar(&n, "n", 2, "Number of smaller lists to create")
-    flag.Parse()
+	var n int
+	flag.IntVar(&n, "n", 2, "Number of smaller lists to create")
+	flag.Parse()
 
-    if len(flag.Args()) < 1 {
-        fmt.Println("Usage: go run split_large.go -n <number_of_splits> <filename>")
-        os.Exit(1)
-    }
+	if n <= 0 {
+		fmt.Println("The number of splits should be greater than 0.")
+		os.Exit(1)
+	}
 
-    filename := flag.Args()[0]
+	// Read from stdin
+	scanner := bufio.NewScanner(os.Stdin)
+	lines := []string{}
 
-    // Step 1: Count the total number of lines
-    file, err := os.Open(filename)
-    check(err)
-    defer file.Close()
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	check(scanner.Err())
 
-    scanner := bufio.NewScanner(file)
-    totalLines := 0
-    for scanner.Scan() {
-        totalLines++
-    }
-    check(scanner.Err())
+	totalLines := len(lines)
+	if totalLines == 0 {
+		fmt.Println("No input provided.")
+		os.Exit(1)
+	}
 
-    if n <= 0 || n > totalLines {
-        fmt.Println("Invalid number of splits. It should be between 1 and the number of lines in the file.")
-        os.Exit(1)
-    }
+	if n > totalLines {
+		fmt.Printf("Number of splits %d is greater than the number of lines %d in the input.\n", n, totalLines)
+		os.Exit(1)
+	}
 
-    // Step 2: Calculate lines per file
-    linesPerFile := totalLines / n
-    remainder := totalLines % n
+	// Calculate lines per file
+	linesPerFile := totalLines / n
+	remainder := totalLines % n
 
-    // Step 3: Reopen the file and split it into smaller files
-    file.Seek(0, 0) // Reset the file pointer to the beginning
-    scanner = bufio.NewScanner(file)
+	// Get the base name for the output files
+	base := "split_part"
+	extension := ".txt"
 
-    base := filepath.Base(filename)
-    extension := filepath.Ext(base)
-    baseName := base[:len(base)-len(extension)]
+	for i := 0; i < n; i++ {
+		partFileName := fmt.Sprintf("%s%d%s", base, i+1, extension)
+		partFile, err := os.Create(partFileName)
+		check(err)
+		defer partFile.Close()
 
-    for i := 0; i < n; i++ {
-        partFileName := fmt.Sprintf("%s_part%d%s", baseName, i+1, extension)
-        partFile, err := os.Create(partFileName)
-        check(err)
-        defer partFile.Close()
+		writer := bufio.NewWriter(partFile)
+		startLine := i * linesPerFile
+		endLine := startLine + linesPerFile
+		if i == n-1 {
+			// Add the remainder to the last file
+			endLine += remainder
+		}
 
-        writer := bufio.NewWriter(partFile)
-        linesToWrite := linesPerFile
-        if remainder > 0 {
-            linesToWrite++
-            remainder--
-        }
+		for _, line := range lines[startLine:endLine] {
+			_, err := writer.WriteString(line + "\n")
+			check(err)
+		}
+		writer.Flush()
+	}
 
-        for j := 0; j < linesToWrite; j++ {
-            if !scanner.Scan() {
-                break
-            }
-            _, err := writer.WriteString(scanner.Text() + "\n")
-            check(err)
-        }
-        writer.Flush()
-    }
-
-    fmt.Println("File splitting completed.")
+	fmt.Println("Splitting completed.")
 }
